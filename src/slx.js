@@ -3,6 +3,46 @@
 var _ = require('lodash');
 var slick = require('slick');
 
+var cssToType = {
+    // only includes literal types (simple selectors)
+    '.': 'class',
+    '#': 'id',
+    '[': 'attr',
+    ':': 'pseudo',
+    '*': 'universal'
+};
+
+var typeToCss = {
+    'class': '.',
+    'id': '#',
+    'tag': '',
+    'attr': '[',
+    'pseudo': ':',
+    'universal': '*'
+}
+
+var cssToFn = {
+    ' ': 'desc',
+    '>': 'child',
+    '~': 'succ',
+    '+': 'next'
+};
+
+var fnToCss = {
+    'desc': ' ',
+    'child': '>',
+    'succ': '~',
+    'next': '+',
+    'before': '::before',
+    'after': '::after'
+};
+
+// Symbol Table, unique object for each literal so === works to compare
+
+var symTable = {};
+var TOP = createLiteral( 'universal', '' );
+var BOTTOM = createLiteral( 'universal', '', true )
+
 // Constructor, internal use
 function Slx ( sumOfProducts ) {
     this.rep = sumOfProducts;
@@ -31,7 +71,7 @@ Slx.prototype.and = function ( b ) {
 
     return new Slx( _.flatten( a.rep.map( function (aTerm) {
         return b.rep.map( function (bTerm) {
-            return _.union(aTerm, bTerm);
+            return _.union( aTerm, bTerm);
         });
     })));
 }
@@ -40,45 +80,30 @@ Slx.prototype.toString = function () {
     return this.rep.map( productToCss ).join(',');
 }
 
-var cssToType = {
-    // only includes literal types (simple selectors)
-    '.': 'class',
-    '#': 'id',
-};
-
-var typeToCss = {
-    'class': '.',
-    'id': '#',
-    'tag': ''
-}
-
-var cssToFn = {
-    ' ': 'desc',
-    '>': 'child',
-    '~': 'succ',
-    '+': 'next'
-};
-
-var fnToCss = {
-    'desc': ' ',
-    'child': '>',
-    'succ': '~',
-    'next': '+'
-};
-
 function productToCss ( product ) {
-    // TODO: what if cannot represent in CSS (e.g., multiple tags)?
-    var tags = literalsOfType('tag'),
+    // TODO: check multiple tags or ids (invalid)
+    var universals = literalsOfType('universal'),
+        tags = literalsOfType('tag'),
         ids = literalsOfType('id'),
         classes = literalsOfType('class'),
-        // TODO: handle attributes
-        // TODO: handle pseudo-classes
-        // TODO: handle pseudo-elements
+        attrs = literalsOfType('attr'),
+        pseudos = literalsOfType('pseudo'),
+        // TODO: handle pseudo-classes with parameters, e.g., nth-child()
         functions = _(product).filter({type: "fn"}),
-        string =  tags.join('') + ids.join('') + classes.join('') || '*';
+        string =  universals + tags + ids + classes + attrs + pseudos || '*';
 
     if ( !functions.isEmpty() ) {
-        // TODO: check for more than one function (cannot represent)
+        // TODO: check for more than one function (invalid)
+
+        switch ( functions.first().fn ) {
+          case 'before':
+          case 'after':
+            // TODO: check for any other predicates w/ ::after or ::before (invalid)
+            string = '';
+            break;
+          default:
+        }
+
         string = productToCss( functions.first().arg ) +
             fnToCss[ functions.first().fn ] + string;
     }
@@ -86,21 +111,16 @@ function productToCss ( product ) {
     return string;
 
     function literalsOfType( type ) {
-        var prefix = typeToCss[type]
+        var prefix = typeToCss[type],
+            suffix = type === 'attr' ? ']' : '';
+
         return _(product).filter({type: type}).map( function (literal) {
-            var s = prefix + literal.name;
-
+            // TODO: escape the value?
+            var opValue = literal.op ? literal.op + '"' + literal.value + '"' : '',
+                s = prefix + literal.name + opValue + suffix;
             return literal.negate ? ':not(' + s + ')' : s;
-        });
+        }).join('');
     }
-}
-
-function idToCss ( id ) {
-    return '#' + id;
-}
-
-function classToCss ( classname ) {
-    return '.' + classname;
 }
 
 /** slick.parse returns a structure like this:
@@ -140,9 +160,10 @@ function convertSlickSelector( levels ) {
 }
 
 function convertSlickLevel( obj, argument ) {
-    var product = [];
+    var product = [],
+        pseudoElement;
 
-    function literal(type, name) {
+    function literal(type, name ) {
         product.push( createLiteral( type, name ) );
     }
 
@@ -154,55 +175,75 @@ function convertSlickLevel( obj, argument ) {
         literal('class', classname);
     });
 
-    obj.pseudos && obj.pseudos.forEach( function (pseudo) {
-        switch (pseudo.name) {
-            case 'not':
-                product.push( parseLiteral( pseudo.value, true ) );
-                break;
-            default:
-            // TODO: implement other pseudo-class selectors
-        }
+    obj.attributes && obj.attributes.forEach( function (attr) {
+        literal('attr', { name: attr.name, op: attr.operator, value: attr.value });
     });
 
-    // TODO: implement attribute selectors
-    // TODO: implement pseudo-element selectors
+    obj.pseudos && obj.pseudos.forEach( function (pseudo) {
+        if ( pseudo.type === 'element' ) {
+            pseudoElement = pseudo;
+        } else {
+            switch (pseudo.name) {
+              case 'not':
+                product.push( parseLiteral( pseudo.value, true ) );
+                break;
+              default:
+                // TODO: implement pseudo-classes with parameters, e.g., nth-child()
+                literal( 'pseudo', pseudo.name );
+                break;
+            }
+        }
+    });
 
     if ( argument ) {
         product.push( createFn( cssToFn[obj.combinator], argument ) );
     }
 
+    // pseudo-elements are really combinator functions, like child()
+    if ( pseudoElement ) {
+        product = [ createFn( pseudoElement.name, product ) ];
+    }
+
+    // An empty product is the top (* selector)
+    if ( !product.length ) {
+        product.push( TOP );
+    }
+
     return product;
 }
 
-function parseLiteral( value, negate ) {
-    // We could use slick to parse the value, but when we know it's a literal, it's easier this way.
-    var type = cssToType[ value[0] ];
+function parseLiteral( name, negate ) {
+    var expr = parse(name),
+        literal = expr.rep[0][0] || TOP;
 
-    if ( type ) {
-        value = value.substr(1);
-    } else {
-        type = 'tag';
+    if ( negate ) {
+        literal = createLiteral( literal.type, literal, negate );
     }
 
-    return createLiteral( type, value, negate );
+    return literal;
 }
 
-// Symbol Table, unique object for each literal so === works to compare
-
-var symTable = {};
-var TOP = createLiteral( 'tag', '*' );
-var NIL = createLiteral( 'tag', '*', true )
-
-function createLiteral(type, name, negate) {
+function createLiteral(type, nameOrObject, negate) {
     negate = !!negate;
-    var key = (negate ? '!' : '') + type + '|' + name,
-        lookup = symTable[key];
+    var nameOpVal = _.isObject(nameOrObject) ? nameOrObject : { name: nameOrObject },
+        name = nameOpVal.name,
+        op = nameOpVal.op || '',
+        value = nameOpVal.value || '',
+        key = (negate ? '!' : '') + type + '|' + name + op + value,
+        literal = symTable[key];
 
-    if ( !lookup ) {
-        lookup = symTable[key] = {type: type, name: name, negate: negate};
+    if ( !literal ) {
+        literal = {type: type, name: name, negate: negate};
+        if ( op ) {
+            _.extend( literal, {
+                op: op,
+                value: value
+            });
+        }
+        symTable[key] = literal;
     }
 
-    return lookup;
+    return literal;
 }
 
 function createFn(fn, arg) {
