@@ -31,13 +31,25 @@ Slx.prototype.and = function ( b ) {
 
     return new Slx( _.flatten( a.rep.map( function (aTerm) {
         return b.rep.map( function (bTerm) {
-            return aTerm.concat(bTerm);
+            return _.union(aTerm, bTerm);
         });
     })));
 }
 
 Slx.prototype.toString = function () {
     return this.rep.map( productToCss ).join(',');
+}
+
+var cssToType = {
+    // only includes literal types (simple selectors)
+    '.': 'class',
+    '#': 'id',
+};
+
+var typeToCss = {
+    'class': '.',
+    'id': '#',
+    'tag': ''
 }
 
 var cssToFn = {
@@ -56,17 +68,14 @@ var fnToCss = {
 
 function productToCss ( product ) {
     // TODO: what if cannot represent in CSS (e.g., multiple tags)?
-    var tags = pluckNames('tag'),
-        ids = pluckNames('id'),
-        classes = pluckNames('class'),
+    var tags = literalsOfType('tag'),
+        ids = literalsOfType('id'),
+        classes = literalsOfType('class'),
         // TODO: handle attributes
         // TODO: handle pseudo-classes
         // TODO: handle pseudo-elements
-        // TODO: handle :not
         functions = _(product).filter({type: "fn"}),
-        string =  tags.join('') +
-            ids.map( idToCss ).join('') +
-            classes.map( classToCss ).join('') || '*';
+        string =  tags.join('') + ids.join('') + classes.join('') || '*';
 
     if ( !functions.isEmpty() ) {
         // TODO: check for more than one function (cannot represent)
@@ -76,8 +85,13 @@ function productToCss ( product ) {
 
     return string;
 
-    function pluckNames( type ) {
-        return _(product).filter({type: type}).pluck('name');
+    function literalsOfType( type ) {
+        var prefix = typeToCss[type]
+        return _(product).filter({type: type}).map( function (literal) {
+            var s = prefix + literal.name;
+
+            return literal.negate ? ':not(' + s + ')' : s;
+        });
     }
 }
 
@@ -98,8 +112,8 @@ function classToCss ( classname ) {
 ]]
 
 This is essentially a sum of products form, where each selector is a product term.  We make this more
-obvious (and computationally simpler) by converting each selector (the inner array) to a product of
-predicates, where combinators are a function predicate.
+obvious (and convenient to operate on) by converting each selector (the inner array) to a product of
+predicates, where combinators are function predicates.
 
 [[
     { type: "tag", arg: "bar" },
@@ -140,9 +154,17 @@ function convertSlickLevel( obj, argument ) {
         literal('class', classname);
     });
 
-    // TODO: implement :not
+    obj.pseudos && obj.pseudos.forEach( function (pseudo) {
+        switch (pseudo.name) {
+            case 'not':
+                product.push( parseLiteral( pseudo.value, true ) );
+                break;
+            default:
+            // TODO: implement other pseudo-class selectors
+        }
+    });
+
     // TODO: implement attribute selectors
-    // TODO: implement pseudo-class selectors
     // TODO: implement pseudo-element selectors
 
     if ( argument ) {
@@ -152,9 +174,24 @@ function convertSlickLevel( obj, argument ) {
     return product;
 }
 
+function parseLiteral( value, negate ) {
+    // We could use slick to parse the value, but when we know it's a literal, it's easier this way.
+    var type = cssToType[ value[0] ];
+
+    if ( type ) {
+        value = value.substr(1);
+    } else {
+        type = 'tag';
+    }
+
+    return createLiteral( type, value, negate );
+}
+
 // Symbol Table, unique object for each literal so === works to compare
 
 var symTable = {};
+var TOP = createLiteral( 'tag', '*' );
+var NIL = createLiteral( 'tag', '*', true )
 
 function createLiteral(type, name, negate) {
     negate = !!negate;
