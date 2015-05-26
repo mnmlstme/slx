@@ -2,19 +2,12 @@ var _ = require('lodash');
 var slick = require('slick');
 var Slx = require('./constructor');
 
-// Symbol Table, unique object for each literal so === works to compare
-
-var symTable = {};
-var TOP = createLiteral( 'universal', '' );
-var BOTTOM = createLiteral( 'universal', '', true );
-
 var cssToFn = {
     ' ': 'desc',
     '>': 'child',
     '~': 'succ',
     '+': 'next'
 };
-
 
 /** slick.parse returns a structure like this:
 [[
@@ -57,7 +50,7 @@ function convertSlickLevel( obj, argument ) {
         pseudoElement;
 
     function literal(type, name ) {
-        product.push( createLiteral( type, name ) );
+        product.push( Slx.createLiteral( type, name ) );
     }
 
     obj.tag && (obj.tag !== '*') && literal('tag', obj.tag);
@@ -89,17 +82,17 @@ function convertSlickLevel( obj, argument ) {
     });
 
     if ( argument ) {
-        product.push( createFn( cssToFn[obj.combinator], argument ) );
+        product.push( Slx.createFn( cssToFn[obj.combinator], argument ) );
     }
 
     // pseudo-elements are really combinator functions, like child()
     if ( pseudoElement ) {
-        product = [ createFn( pseudoElement.name, product ) ];
+        product = [ Slx.createFn( pseudoElement.name, product ) ];
     }
 
     // An empty product is the top (* selector)
     if ( !product.length ) {
-        product.push( TOP );
+        product = Slx.TOP.rep[0];
     }
 
     return product;
@@ -107,40 +100,13 @@ function convertSlickLevel( obj, argument ) {
 
 function parseLiteral( name, negate ) {
     var expr = parse(name),
-        literal = expr.rep[0][0] || TOP;
+        literal = expr.rep[0][0];
 
     if ( negate ) {
-        literal = createLiteral( literal.type, literal, negate );
+        literal = Slx.createLiteral( literal.type, literal, negate );
     }
 
     return literal;
-}
-
-function createLiteral(type, nameOrObject, negate) {
-    negate = !!negate;
-    var nameOpVal = _.isObject(nameOrObject) ? nameOrObject : { name: nameOrObject },
-        name = nameOpVal.name,
-        op = nameOpVal.op || '',
-        value = nameOpVal.value || '',
-        key = (negate ? '!' : '') + type + '|' + name + op + value,
-        literal = symTable[key];
-
-    if ( !literal ) {
-        literal = {type: type, name: name, negate: negate};
-        if ( op ) {
-            _.extend( literal, {
-                op: op,
-                value: value
-            });
-        }
-        symTable[key] = literal;
-    }
-
-    return literal;
-}
-
-function createFn(fn, arg) {
-    return {type: 'fn', fn: fn, arg: arg};
 }
 
 module.exports = parse;

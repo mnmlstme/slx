@@ -15,7 +15,11 @@ var fnToCss = {
     'succ': '~',
     'next': '+',
     'before': '::before',
-    'after': '::after'
+    'after': '::after',
+    // these are not CSS, we need a more general notation to express them
+    'desc*': '>>',
+    'succ*': '++',
+
 };
 
 function toString () {
@@ -32,22 +36,29 @@ function productToCss ( product ) {
         pseudos = literalsOfType('pseudo'),
         // TODO: handle pseudo-classes with parameters, e.g., nth-child()
         functions = _(product).filter({type: "fn"}),
+        f = functions.first(),
         string =  universals + tags + ids + classes + attrs + pseudos || '*';
 
     if ( !functions.isEmpty() ) {
-        // TODO: check for more than one function (invalid)
-
-        switch ( functions.first().fn ) {
+        if ( functions.length > 1 ) {
+            throw "CSS cannot express more than one function";
+        }
+        switch ( f.fn ) {
           case 'before':
           case 'after':
-            // TODO: check for any other predicates w/ ::after or ::before (invalid)
+            if ( string !== '*' ) {
+                throw "CSS cannot express predicates on ::" + f.fn;
+            }
             string = '';
             break;
           default:
         }
 
-        string = productToCss( functions.first().arg ) +
-            fnToCss[ functions.first().fn ] + string;
+        if ( !fnToCss[ f.fn ] ) {
+            throw "CSS cannot express combinator function " + f.fn;
+        }
+
+        string = productToCss( f.arg ) + fnToCss[ f.fn ] + string;
     }
 
     return string;

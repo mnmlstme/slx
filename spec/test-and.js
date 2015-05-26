@@ -22,9 +22,6 @@ describe("conjunction of selectors (logical AND, CSS juxtaposition)", function (
     it("combines child tag and :pseudo selectors", function () {
         expect(slx("ul.a>li").and(slx(":hover")).toString()).toBe("ul.a>li:hover");
     });
-    it("will not combine .class and ::pseudo-element selectors", function () {
-        expect(slx(".a").and(slx("::before")).toString()).toBe("*::before");
-    });
 
     it("combines descendant and .class selectors", function () {
         expect(slx(".a *").and(slx(".b")).toString()).toBe(".a .b");
@@ -64,7 +61,9 @@ describe("conjunction of selectors (logical AND, CSS juxtaposition)", function (
             .toBe("a#b.c.d[e][f]:hover:first-child");
     });
 
-
+    DEFER || it("combines two child selectors", function () {
+        expect(slx(".a>*").and(slx(".b>*")).toString()).toBe(".a.b>*");
+    });
 
     DEFER || it("invalidates :not .class and .class selectors", function () {
         expect(slx(":not(.a)").and(slx(".a")).toString()).toBe(":not(*)");
