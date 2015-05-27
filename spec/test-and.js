@@ -57,21 +57,21 @@ describe("conjunction of selectors (logical AND, CSS juxtaposition)", function (
         expect(slx(":hover").and(slx(":hover")).toString()).toBe(":hover");
     });
     it("combines identical literals", function () {
-        expect(slx("a#b.c.d[e][f]:hover:first-child").and(slx("a#b.c[e]:hover")).toString())
-            .toBe("a#b.c.d[e][f]:hover:first-child");
+        expect(slx("a#b.c.d[e][f]:first-child:hover").and(slx("a#b.c[e]:hover")).toString())
+            .toBe("a#b.c.d[e][f]:first-child:hover");
     });
 
-    DEFER || it("combines two child selectors", function () {
-        expect(slx(".a>*").and(slx(".b>*")).toString()).toBe(".a.b>*");
-    });
-
-    DEFER || it("invalidates :not .class and .class selectors", function () {
+    it("cancels :not .class and .class selectors", function () {
         expect(slx(":not(.a)").and(slx(".a")).toString()).toBe(":not(*)");
     });
-    DEFER || it("invalidates multiple tag selectors", function () {
+    it("cancels multiple tag selectors", function () {
         expect(slx("a.b").and(slx("span")).toString()).toBe(":not(*)");
     });
-    DEFER || it("invalidates multiple #id selectors", function () {
+    it("cancels multiple #id selectors", function () {
         expect(slx("#a").and(slx("#b")).toString()).toBe(":not(*)");
+    });
+
+    it("combines two child selectors", function () {
+        expect(slx(".a>*").and(slx(".b>*")).toString()).toBe(".a.b>*");
     });
 });

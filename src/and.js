@@ -7,7 +7,7 @@ function and ( b ) {
 
     return new Slx( _.flatten( a.rep.map( function (aTerm) {
         return b.rep.map( function (bTerm) {
-            return _.union( aTerm, bTerm);
+            return aTerm.concat(bTerm);
         });
     })));
 }
