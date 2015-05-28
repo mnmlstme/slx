@@ -15,11 +15,7 @@ var fnToCss = {
     'succ': '~',
     'next': '+',
     'before': '::before',
-    'after': '::after',
-    // these are not CSS, we need a more general notation to express them
-    'desc*': '>>',
-    'succ*': '++',
-
+    'after': '::after'
 };
 
 function toString () {
@@ -58,7 +54,9 @@ function productToCss ( product ) {
             throw "CSS cannot express combinator function " + f.fn;
         }
 
-        string = productToCss( f.arg ) + fnToCss[ f.fn ] + string;
+        string = f.negate ?
+            (string === '*' ? '' : string ) + ':not(' + productToCss( f.arg ) + fnToCss[ f.fn ] + '*)' :
+            productToCss( f.arg ) + fnToCss[ f.fn ] + string;
     }
 
     return string;

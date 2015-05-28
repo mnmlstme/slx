@@ -69,14 +69,12 @@ describe("complement of selector", function () {
         expect(slx(".a + .b").not().toString()).toBe(":not(.b),:not(.a)+*");
     });
 
-    // The following are not valid CSS.  Just for testing.
+    // The following are not valid CSS3, but they will be CSS4
     it("inverts the desc selector", function () {
-        expect(slx(".a .b").not().toString()).toBe(":not(.b),:not(.a)>>*");
+        expect(slx(".a .b").not().toString()).toBe(":not(.b),:not(.a *)");
     });
     it("inverts the succ selector", function () {
-        expect(slx(".a ~ .b").not().toString()).toBe(":not(.b),:not(.a)++*");
+        expect(slx(".a ~ .b").not().toString()).toBe(":not(.b),:not(.a~*)");
     });
-
-
 
 });

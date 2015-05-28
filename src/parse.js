@@ -1,6 +1,7 @@
 var _ = require('lodash');
 var slick = require('slick');
 var Slx = require('./constructor');
+var builder = require('./builder');
 
 var cssToFn = {
     ' ': 'desc',
@@ -50,7 +51,7 @@ function convertSlickLevel( obj, argument ) {
         pseudoElement;
 
     function literal(type, name ) {
-        product.push( Slx.createLiteral( type, name ) );
+        product.push( builder.createLiteral( type, name ) );
     }
 
     obj.tag && (obj.tag !== '*') && literal('tag', obj.tag);
@@ -82,17 +83,17 @@ function convertSlickLevel( obj, argument ) {
     });
 
     if ( argument ) {
-        product.push( Slx.createFn( cssToFn[obj.combinator], argument ) );
+        product.push( builder.createFn( cssToFn[obj.combinator], argument ) );
     }
 
     // pseudo-elements are really combinator functions, like child()
     if ( pseudoElement ) {
-        product = [ Slx.createFn( pseudoElement.name, product ) ];
+        product = [ builder.createFn( pseudoElement.name, product ) ];
     }
 
     // An empty product is the top (* selector)
     if ( !product.length ) {
-        product = Slx.TOP.rep[0];
+        product = [builder.TOP];
     }
 
     return product;
@@ -103,7 +104,7 @@ function parseLiteral( name, negate ) {
         literal = expr.rep[0][0];
 
     if ( negate ) {
-        literal = Slx.createLiteral( literal.type, literal, negate );
+        literal = builder.createLiteral( literal.type, literal, negate );
     }
 
     return literal;

@@ -1,5 +1,6 @@
 var _ = require('lodash');
 var Slx = require('./constructor');
+var builder = require('./builder');
 
 function not() {
     var sum = this.rep;
@@ -34,33 +35,26 @@ function invertTerm (term) {
         case 'id':
         case 'attr':
         case 'pseudo':
-            return new Slx( [[Slx.createLiteral( type, term, true )]] );
+            return new Slx( [[builder.createLiteral( type, term, true )]] );
         default:
             throw "unhandled: inverting a term of type " + type;
     };
 }
 
 function invertFunction (term) {
-    var fn = term.fn,
-        invArg = invertProduct(term.arg);
+    var fn = term.fn;
 
     switch (fn) {
         case 'child':
         case 'next':
-            return _.reduce( invArg.rep.map( function (product) {
-                return new Slx( [[Slx.createFn( fn, product )]] );
-            }), function (a,b) {
-                return a.or(b);
-            });
-        case 'desc':
-        case 'succ':
-            return _.reduce( invArg.rep.map( function (product) {
-                return new Slx( [[Slx.createFn( fn + '*', product )]] );
+            return _.reduce( invertProduct(term.arg).rep.map( function (product) {
+                return new Slx( [[builder.createFn( fn, product )]] );
             }), function (a,b) {
                 return a.or(b);
             });
         default:
-            throw "unhandled: inverting a " + fn + " function";
+            // the remaining functions cannot be inverted
+            return new Slx( [[builder.createFn( fn, term.arg, true )]] );
     }
 }
 
