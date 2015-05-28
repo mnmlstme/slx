@@ -16,4 +16,23 @@ describe("normalizer as applied thru parser", function () {
         expect(slx(".a#b").toString()).toBe("#b.a");
     });
 
+    it("normalizes through child selectors", function () {
+        expect(slx(".x.a.a > .x.b.b").toString()).toBe(".a.x>.b.x");
+    });
+    it("normalizes through desc selectors", function () {
+        expect(slx(".x.a.a .x.b.b").toString()).toBe(".a.x .b.x");
+    });
+    it("normalizes through next selectors", function () {
+        expect(slx(".x.a.a + .x.b.b").toString()).toBe(".a.x+.b.x");
+    });
+    it("normalizes through succ selectors", function () {
+        expect(slx(".x.a.a ~ .x.b.b").toString()).toBe(".a.x~.b.x");
+    });
+    it("normalizes through multiple child selectors", function () {
+        expect(slx(".x.a.a > .x.b.b > .x.c.c").toString()).toBe(".a.x>.b.x>.c.x");
+    });
+    it("normalizes through multiple combinators", function () {
+        expect(slx(".x.a.a .x.b.b > .x.c.c ~ .x.d.d + .x.e.e").toString()).toBe(".a.x .b.x>.c.x~.d.x+.e.x");
+    });
+
 });

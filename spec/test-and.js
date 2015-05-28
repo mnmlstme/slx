@@ -74,4 +74,7 @@ describe("conjunction of selectors (logical AND, CSS juxtaposition)", function (
     it("combines two child selectors", function () {
         expect(slx(".a>*").and(slx(".b>*")).toString()).toBe(".a.b>*");
     });
+    it("combines two next selectors", function () {
+        expect(slx(".a+*").and(slx(".b+*")).toString()).toBe(".a.b+*");
+    });
 });
