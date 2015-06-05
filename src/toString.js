@@ -55,8 +55,8 @@ function productToCss ( product ) {
         }
 
         string = f.negate ?
-            (string === '*' ? '' : string ) + ':not(' + productToCss( f.arg ) + fnToCss[ f.fn ] + '*)' :
-            productToCss( f.arg ) + fnToCss[ f.fn ] + string;
+            (string === '*' ? '' : string ) + ':not(' + f.arg.toString() + fnToCss[ f.fn ] + '*)' :
+            f.arg.toString() + fnToCss[ f.fn ] + string;
     }
 
     return string;

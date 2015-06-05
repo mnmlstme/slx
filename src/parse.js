@@ -33,17 +33,17 @@ predicates, where combinators are function predicates.
 function parse ( selectorString ) {
     var selectors = slick.parse( selectorString );
 
-    return new Slx( _.map(selectors, convertSlickSelector ) );
+    return _.map( selectors, convertSlickSelector );
 }
 
 function convertSlickSelector( levels ) {
-    var result;
+    var product;
 
     for ( i = 0; i < levels.length; i++ ) {
-        result = convertSlickLevel( levels[i], result );
+        product = convertSlickLevel( levels[i], product && new Slx([product]) );
     }
 
-    return result;
+    return product;
 }
 
 function convertSlickLevel( obj, argument ) {
@@ -88,7 +88,7 @@ function convertSlickLevel( obj, argument ) {
 
     // pseudo-elements are really combinator functions, like child()
     if ( pseudoElement ) {
-        product = [ builder.createFn( pseudoElement.name, product ) ];
+        product = [ builder.createFn( pseudoElement.name, new Slx([product]) ) ];
     }
 
     // An empty product is the top (* selector)
@@ -100,8 +100,8 @@ function convertSlickLevel( obj, argument ) {
 }
 
 function parseLiteral( name, negate ) {
-    var expr = parse(name),
-        literal = expr.rep[0][0];
+    var sum = parse(name),
+        literal = sum[0][0];
 
     if ( negate ) {
         literal = builder.createLiteral( literal.type, literal, negate );

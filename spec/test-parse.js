@@ -76,6 +76,9 @@ describe("parsing and formatting", function () {
     it("accepts child tag selectors", function () {
         expect(slx("ul.b>li").toString()).toBe("ul.b>li");
     });
+    it("accepts a chain of child selectors", function () {
+        expect(slx(".a > .b > .c").toString()).toBe(".a>.b>.c");
+    });
 
     it("accepts descendant .class selectors", function () {
         expect(slx(".b .a").toString()).toBe(".b .a");
@@ -128,5 +131,4 @@ describe("parsing and formatting", function () {
     it("accepts :not :pseudo selector", function () {
         expect(slx(':not(:hover)').toString()).toBe(':not(:hover)');
     });
-
 });

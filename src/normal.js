@@ -6,24 +6,18 @@ var MAX_ITERATIONS = 10;
 
 // normalize expressions using term rewriting
 
-function normalize ( original ) {
-    return normalizeProducts( original );
-    // TODO: also normalize at the sum level
+function normal ( original ) {
+    var original = this;
+
+    return original.normalized ? original :
+        new Slx( normalizeProducts( original.rep ), true );
 }
 
+// TODO: normalize at the sum level
+
 function normalizeProducts ( originalSum ) {
-    return originalSum.map( function (originalProduct) {
-        var result = originalProduct.map( function(t) {
-                var normalArg;
-                if (t.arg) {
-                    normalArg = normalizeProducts([t.arg])[0];
-                    if ( normalArg !== t.arg ) {
-                        t = builder.createFn(t.fn, normalArg, t.negate);
-                    }
-                }
-                return t;
-            }),
-            applied,
+    return originalSum.map( function (product) {
+        var applied,
             outerLoop = 0;
 
         do {
@@ -36,7 +30,7 @@ function normalizeProducts ( originalSum ) {
                 var applicable,
                     innerLoop = 0;
                 do {
-                    applicable = rule(result);
+                    applicable = rule(product);
 
                     if( applicable ) {
                         innerLoop++;
@@ -44,14 +38,28 @@ function normalizeProducts ( originalSum ) {
                             throw "term rewrite inner loop exceeded max iterations";
                         }
                         applied = true;
-                        result = applicable(result);
+                        product = applicable(product);
                     }
                 } while(applicable);
             });
         } while ( applied );
 
-        return result;
+        return _.sortBy( product, termOrder );
     });
+}
+
+var typeOrder = {
+    'universal': '0',
+    'tag': '1',
+    'id': '2',
+    'class': '3',
+    'attr': '4',
+    'pseudo': '5',
+    'fn': '6'
+};
+
+function termOrder (t) {
+    return typeOrder[t.type] + t.name;
 }
 
 function rewriteTerms( matchFn, rewriteFn ) {
@@ -59,7 +67,11 @@ function rewriteTerms( matchFn, rewriteFn ) {
         var m = findTerm( product, matchFn );
         if ( m ) {
             return function (product) {
-                return rewriteFn(product, m.t, m.i);
+                var result = _.reject( product, function (t, i) {
+                        return i === m.i;
+                    });
+                result.push( rewriteFn(m.t) );
+                return result;
             };
         }
     }
@@ -70,7 +82,11 @@ function rewriteTermPairs( matchFn, rewriteFn ) {
         var m = findPair( product, matchFn );
         if ( m ) {
             return function (product) {
-                return rewriteFn(product, m.t1, m.t2, m.i1, m.i2);
+                var result = _.reject( product, function (t, i) {
+                        return i === m.i1 || i === m.i2;
+                    });
+                result.push( rewriteFn(m.t1, m.t2) );
+                return result;
             };
         }
     }
@@ -101,28 +117,19 @@ function findPair ( product, matchFn ) {
 
 var productRules = [
 
-    /*
     // ¬child(a) ⟶ child(¬a)
     // ¬next(a) ⟶ next(¬a)
     rewriteTerms( function (t) {
         return t.type === 'fn' && t.negate && (t.fn === 'child' || t.fn === 'next');
-    }, function (product, t1, i1) {
-        var arg = (new Slx([t1.arg])).not(),
-            result = _.reject( product, function (t, i) {
-                return i === i1;
-            });
-        result.push( builder.createFn(t1.fn, t1.arg, true) );
-        return result;
+    }, function (t) {
+        return builder.createFn(t.fn, t.arg.not());
     }),
-    */
 
     // a ⋀ a ⟶ a
     rewriteTermPairs( function (t1,t2) {
         return t2 === t1;
-    }, function (product, t1, t2, i1, i2) {
-        return _.reject( product, function (t, i) {
-            return i === i2;
-        });
+    }, function (t1) {
+        return t1;
     }),
 
     // a ⋀ ¬a ⟶ ⊥
@@ -130,15 +137,16 @@ var productRules = [
         return t1.type !== 'fn' &&
             t2 === builder.createLiteral( t1.type, t1, true );
     }, function () {
-        return [builder.BOTTOM];
+        return builder.BOTTOM;
     }),
+
 
     // tag:a ⋀ tag:b ⟶ ⊥
     rewriteTermPairs( function (t1, t2) {
         return t1.type === 'tag' && t2.type === 'tag' &&
             !t1.negate && !t2.negate && t1.name !== t2.name;
     }, function () {
-        return [builder.BOTTOM];
+        return builder.BOTTOM;
     }),
 
     // id:a ⋀ id:b ⟶ ⊥
@@ -146,7 +154,22 @@ var productRules = [
         return t1.type === 'id' && t2.type === 'id' &&
             !t1.negate && !t2.negate && t1.name !== t2.name;
     }, function () {
-        return [builder.BOTTOM];
+        return builder.BOTTOM;
+    }),
+    // a ⋀ ⊥ ⟶ ⊥
+    // ⊥ ⋀ a ⟶ ⊥
+    rewriteTermPairs( function (t1, t2) {
+        return t1 === builder.BOTTOM || t2 === builder.BOTTOM;
+    }, function () {
+        return builder.BOTTOM;
+    }),
+
+    // a ⋀ ⊤ ⟶ a
+    // ⊤ ⋀ a ⟶ a
+    rewriteTermPairs( function (t1, t2) {
+        return t1 === builder.TOP || t2 === builder.TOP;
+    }, function (t1, t2) {
+        return t1 === builder.TOP ? t2 : t1;
     }),
 
     // child(a) ⋀ child(b) ⟶ child(a ⋀ b)
@@ -154,36 +177,9 @@ var productRules = [
     rewriteTermPairs( function (t1,t2) {
         return t1.type === 'fn' && t2.type === 'fn' &&
             (t1.fn === 'child' || t1.fn === 'next') && t2.fn === t1.fn;
-    }, function (product, t1, t2, i1, i2) {
-        var arg = _.union(t1.arg, t2.arg),
-            result = _.reject( product, function (t, i) {
-                return i === i1 || i === i2;
-            });
-        result.push( builder.createFn( t1.fn, arg ) );
-        return result;
+    }, function (t1, t2) {
+        return builder.createFn( t1.fn, t1.arg.and(t2.arg) );
     }),
-
-    // order terms lexicographically
-    function (product) {
-        var sorted = _.sortBy( product, termOrder );
-        return ! _.isEqual( product, sorted ) && function () {
-            return sorted;
-        }
-    }
 ];
 
-var typeOrder = {
-    'universal': '0',
-    'tag': '1',
-    'id': '2',
-    'class': '3',
-    'attr': '4',
-    'pseudo': '5',
-    'fn': '6'
-};
-
-function termOrder (t) {
-    return typeOrder[t.type] + t.name;
-}
-
-module.exports = normalize;
+module.exports = normal;

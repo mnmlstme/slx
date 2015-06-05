@@ -20,38 +20,12 @@ function invertProduct (array) {
 }
 
 function invertTerm (term) {
-    var type = term.type;
+    var type = term.type,
+        literal = type === 'fn' ?
+            builder.createFn( term.fn, term.arg, true ) :
+            builder.createLiteral( type, term, true )
 
-    switch ( type ) {
-        case 'fn':
-            return invertFunction(term);
-        case 'universal':
-        case 'class':
-        case 'tag':
-        case 'id':
-        case 'attr':
-        case 'pseudo':
-            return new Slx( [[builder.createLiteral( type, term, true )]] );
-        default:
-            throw "unhandled: inverting a term of type " + type;
-    };
-}
-
-function invertFunction (term) {
-    var fn = term.fn;
-
-    switch (fn) {
-        case 'child':
-        case 'next':
-            return _.reduce( invertProduct(term.arg).rep.map( function (product) {
-                return new Slx( [[builder.createFn( fn, product )]] );
-            }), function (a,b) {
-                return a.or(b);
-            });
-        default:
-            // the remaining functions cannot be inverted
-            return new Slx( [[builder.createFn( fn, term.arg, true )]] );
-    }
+    return (new Slx( [[literal]] )).normal();
 }
 
 module.exports = not;
