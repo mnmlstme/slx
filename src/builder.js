@@ -33,9 +33,24 @@ function createFn (fn, arg, negate) {
     return {type: 'fn', fn: fn, arg: arg, negate: negate};
 }
 
+function isTerm ( sop ) {
+    return sop.length === 1 && sop[0].length === 1;
+}
+
+function isSum ( sop ) {
+    return sop.length > 1;
+}
+
+function isProduct ( sop ) {
+    return sop.length === 1 && sop[0].length > 1;
+}
+
 module.exports = {
     TOP: TOP,
     BOTTOM: BOTTOM,
     createLiteral: createLiteral,
-    createFn: createFn
+    createFn: createFn,
+    isTerm,
+    isSum,
+    isProduct
 };

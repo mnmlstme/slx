@@ -33,7 +33,8 @@ function productToCss ( product ) {
         // TODO: handle pseudo-classes with parameters, e.g., nth-child()
         functions = _(product).filter({type: "fn"}),
         f = functions.first(),
-        string =  universals + tags + ids + classes + attrs + pseudos || '*';
+        string =  universals + tags + ids + classes + attrs + pseudos || '*',
+        arg;
 
     if ( !functions.isEmpty() ) {
         if ( functions.length > 1 ) {
@@ -54,9 +55,16 @@ function productToCss ( product ) {
             throw "CSS cannot express combinator function " + f.fn;
         }
 
+        arg = f.arg.toString();
+
+        if ( f.arg.rep.length > 1 ) {
+            // TODO: this is not valid CSS: (.a, .b) > .c
+            arg = '(' + arg + ')';
+        }
+
         string = f.negate ?
-            (string === '*' ? '' : string ) + ':not(' + f.arg.toString() + fnToCss[ f.fn ] + '*)' :
-            f.arg.toString() + fnToCss[ f.fn ] + string;
+            (string === '*' ? '' : string ) + ':not(' + arg + fnToCss[ f.fn ] + '*)' :
+            arg + fnToCss[ f.fn ] + string;
     }
 
     return string;

@@ -13,19 +13,26 @@ function normal ( original ) {
         new Slx( normalizeProducts( original.rep ), true );
 }
 
-// TODO: normalize at the sum level
+// TODO: normalize at the sum level also
 
 function normalizeProducts ( originalSum ) {
-    return originalSum.map( function (product) {
-        var applied,
-            outerLoop = 0;
+    var sum = originalSum.slice(),
+        product,
+        rewritten,
+        outerLoop,
+        i;
+
+    for ( i=0; i < sum.length; i++ ) {
+        product = sum[i];
+        outerLoop = 0;
 
         do {
-            applied = false;
+            rewritten = false;
             outerLoop++;
             if ( outerLoop > MAX_ITERATIONS ) {
                 throw "term rewrite outer loop exceeded max iterations";
             }
+
             productRules.forEach( function (rule) {
                 var applicable,
                     innerLoop = 0;
@@ -37,15 +44,23 @@ function normalizeProducts ( originalSum ) {
                         if ( innerLoop > MAX_ITERATIONS )  {
                             throw "term rewrite inner loop exceeded max iterations";
                         }
-                        applied = true;
-                        product = applicable(product);
+                        rewritten = applicable(product);
+                        product = rewritten.shift();
+                        while ( rewritten.length ) {
+                            sum.push( rewritten.shift() );
+                        }
+                        rewritten = true;
                     }
                 } while(applicable);
             });
-        } while ( applied );
+        } while ( rewritten );
 
-        return _.sortBy( product, termOrder );
-    });
+        if ( product !== sum[i] ) {
+            sum[i] = _.sortBy( product, termOrder );
+        }
+    }
+
+    return sum;
 }
 
 var typeOrder = {
@@ -67,11 +82,14 @@ function rewriteTerms( matchFn, rewriteFn ) {
         var m = findTerm( product, matchFn );
         if ( m ) {
             return function (product) {
-                var result = _.reject( product, function (t, i) {
+                var others = _.reject( product, function (t, i) {
                         return i === m.i;
-                    });
-                result.push( rewriteFn(m.t) );
-                return result;
+                    }),
+                    rewritten = rewriteFn(m.t);
+
+                return rewritten.map( function (product) {
+                    return _.union( others, product );
+                });
             };
         }
     }
@@ -82,11 +100,14 @@ function rewriteTermPairs( matchFn, rewriteFn ) {
         var m = findPair( product, matchFn );
         if ( m ) {
             return function (product) {
-                var result = _.reject( product, function (t, i) {
+                var others = _.reject( product, function (t, i) {
                         return i === m.i1 || i === m.i2;
-                    });
-                result.push( rewriteFn(m.t1, m.t2) );
-                return result;
+                    }),
+                    rewritten = rewriteFn(m.t1, m.t2);
+
+                return rewritten.map( function (product) {
+                    return _.union( others, product );
+                });
             };
         }
     }
@@ -122,14 +143,26 @@ var productRules = [
     rewriteTerms( function (t) {
         return t.type === 'fn' && t.negate && (t.fn === 'child' || t.fn === 'next');
     }, function (t) {
-        return builder.createFn(t.fn, t.arg.not());
+        return [[builder.createFn(t.fn, t.arg.not())]];
+    }),
+
+    // child(a ⋀ b) ⟶ child(a) ⋀ child(b)
+    // next(a ⋀ b) ⟶ next(a) ⋀ next(b)
+    rewriteTerms( function (t) {
+        return t.type === 'fn' && !t.negate && (t.fn === 'child' || t.fn === 'next') &&
+            t.arg.rep.length > 1;
+    }, function (t) {
+        var sum = t.arg.rep.map( function (product) {
+            return [builder.createFn(t.fn, new Slx([product]))];
+        });
+        return sum;
     }),
 
     // a ⋀ a ⟶ a
     rewriteTermPairs( function (t1,t2) {
         return t2 === t1;
     }, function (t1) {
-        return t1;
+        return [[t1]];
     }),
 
     // a ⋀ ¬a ⟶ ⊥
@@ -137,7 +170,7 @@ var productRules = [
         return t1.type !== 'fn' &&
             t2 === builder.createLiteral( t1.type, t1, true );
     }, function () {
-        return builder.BOTTOM;
+        return [[builder.BOTTOM]];
     }),
 
 
@@ -146,7 +179,7 @@ var productRules = [
         return t1.type === 'tag' && t2.type === 'tag' &&
             !t1.negate && !t2.negate && t1.name !== t2.name;
     }, function () {
-        return builder.BOTTOM;
+        return [[builder.BOTTOM]];
     }),
 
     // id:a ⋀ id:b ⟶ ⊥
@@ -154,14 +187,14 @@ var productRules = [
         return t1.type === 'id' && t2.type === 'id' &&
             !t1.negate && !t2.negate && t1.name !== t2.name;
     }, function () {
-        return builder.BOTTOM;
+        return [[builder.BOTTOM]];
     }),
     // a ⋀ ⊥ ⟶ ⊥
     // ⊥ ⋀ a ⟶ ⊥
     rewriteTermPairs( function (t1, t2) {
         return t1 === builder.BOTTOM || t2 === builder.BOTTOM;
     }, function () {
-        return builder.BOTTOM;
+        return [[builder.BOTTOM]];
     }),
 
     // a ⋀ ⊤ ⟶ a
@@ -169,7 +202,7 @@ var productRules = [
     rewriteTermPairs( function (t1, t2) {
         return t1 === builder.TOP || t2 === builder.TOP;
     }, function (t1, t2) {
-        return t1 === builder.TOP ? t2 : t1;
+        return t1 === builder.TOP ? [[t2]] : [[t1]];
     }),
 
     // child(a) ⋀ child(b) ⟶ child(a ⋀ b)
@@ -178,7 +211,7 @@ var productRules = [
         return t1.type === 'fn' && t2.type === 'fn' &&
             (t1.fn === 'child' || t1.fn === 'next') && t2.fn === t1.fn;
     }, function (t1, t2) {
-        return builder.createFn( t1.fn, t1.arg.and(t2.arg) );
+        return [[builder.createFn( t1.fn, t1.arg.and(t2.arg) )]];
     }),
 ];
 
