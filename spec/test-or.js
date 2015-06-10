@@ -13,16 +13,16 @@ describe("disjunction of selectors (logical OR, CSS comma)", function () {
         expect(slx("ul.a>li").or(slx("#b .b")).toString()).toBe("ul.a>li,#b .b");
     });
 
-    DEFER || it("eliminates repeated .class selectors", function () {
+    it("eliminates repeated .class selectors", function () {
         expect(slx(".a").or(slx(".a")).toString()).toBe(".a");
     });
-    DEFER || it("eliminates repeated #id selectors", function () {
+    it("eliminates repeated #id selectors", function () {
         expect(slx("#a").or(slx("#a")).toString()).toBe("#a");
     });
-    DEFER || it("eliminates repeated product terms", function () {
+    it("eliminates repeated product terms", function () {
         expect(slx(".a.b").or(slx(".a.b")).toString()).toBe(".a.b");
     });
-    DEFER || it("combines :not .class and .class", function () {
+    it("combines :not .class and .class", function () {
         expect(slx(":not(.a)").or(slx(".a")).toString()).toBe("*");
     });
 

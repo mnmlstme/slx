@@ -2,63 +2,83 @@ var _ = require('lodash');
 var builder = require('./builder');
 var Slx = require('./constructor');
 
-var MAX_ITERATIONS = 10;
+var MAX_SUM_ITERATIONS = 10;
+var MAX_PRODUCT_ITERATIONS = 10;
+var MAX_RULE_ITERATIONS = 10;
 
 // normalize expressions using term rewriting
 
-function normal ( original ) {
+function normal () {
     var original = this;
 
     return original.normalized ? original :
-        new Slx( normalizeProducts( original.rep ), true );
+        new Slx( normalize( original.rep ), true );
 }
 
-// TODO: normalize at the sum level also
+function normalize ( originalSum ) {
+    var sum = normalizeProducts ( originalSum );
+
+    return sum;
+}
 
 function normalizeProducts ( originalSum ) {
-    var sum = originalSum.slice(),
-        product,
-        rewritten,
-        outerLoop,
-        i;
+    var sum = originalSum;
 
-    for ( i=0; i < sum.length; i++ ) {
-        product = sum[i];
-        outerLoop = 0;
+    for ( var i = 0; i < sum.length; i++ ) {
+        sum = applyAllProductRules(sum, i);
+    }
 
-        do {
-            rewritten = false;
-            outerLoop++;
-            if ( outerLoop > MAX_ITERATIONS ) {
-                throw "term rewrite outer loop exceeded max iterations";
+    return sum;
+}
+
+function applyAllProductRules ( originalSum, i ) {
+    var sum = originalSum,
+        iteration = 0,
+        priorSum;
+
+    do {
+        if ( iteration++ > MAX_PRODUCT_ITERATIONS ) {
+            throw "product rewrite loop exceeded max iterations";
+        }
+
+        priorSum = sum;
+        productRules.forEach( function (rule) {
+            sum = applyProductRule( sum, i, rule );
+        });
+
+    } while ( sum !== priorSum );
+
+    if ( sum !== originalSum ) {
+        sum[i] = _.sortBy( sum[i], termOrder );
+    }
+
+    return sum;
+}
+
+function applyProductRule ( originalSum, i, rule ) {
+    var sum = originalSum,
+        product = sum[i],
+        iteration = 0,
+        rewrite,
+        rewritten;
+
+    do {
+        rewrite = rule(product);
+
+        if( rewrite ) {
+            if ( iteration++ > MAX_RULE_ITERATIONS )  {
+                throw "term rewrite loop exceeded max iterations";
             }
 
-            productRules.forEach( function (rule) {
-                var applicable,
-                    innerLoop = 0;
-                do {
-                    applicable = rule(product);
-
-                    if( applicable ) {
-                        innerLoop++;
-                        if ( innerLoop > MAX_ITERATIONS )  {
-                            throw "term rewrite inner loop exceeded max iterations";
-                        }
-                        rewritten = applicable(product);
-                        product = rewritten.shift();
-                        while ( rewritten.length ) {
-                            sum.push( rewritten.shift() );
-                        }
-                        rewritten = true;
-                    }
-                } while(applicable);
-            });
-        } while ( rewritten );
-
-        if ( product !== sum[i] ) {
-            sum[i] = _.sortBy( product, termOrder );
+            rewritten = rewrite(product);
+            product = rewritten.shift();
+            sum = sum.slice();
+            sum.splice(i, 1, product);
+            while ( rewritten.length ) {
+                sum.push( rewritten.shift() );
+            }
         }
-    }
+    } while( rewrite );
 
     return sum;
 }
@@ -75,6 +95,22 @@ var typeOrder = {
 
 function termOrder (t) {
     return typeOrder[t.type] + t.name;
+}
+
+function rewriteSum( matchFn, rewriteFn ) {
+    return function (sum) {
+        var m = findProductPair( sum, matchFn );
+        if ( m ) {
+            return function (sum) {
+                var others = _.reject( sum, function (p, i) {
+                    return i === m.i1 || i === m.i2;
+                }),
+                rewritten = rewriteFn(m.p1, m.p2);
+
+                return _.union( others, rewritten );
+            }
+        }
+    }
 }
 
 function rewriteTerms( matchFn, rewriteFn ) {
@@ -134,6 +170,16 @@ function findPair ( product, matchFn ) {
             }
         }
     }
+}
+
+function productsEqual ( a, b ) {
+    var mismatch = a.length !== b.length;
+
+    for ( var i = 0; !mismatch && i < a.length && i < b.length; i++ ){
+        mismatch = a[i] !== b[i];
+    }
+
+    return !mismatch;
 }
 
 var productRules = [
@@ -213,6 +259,15 @@ var productRules = [
     }, function (t1, t2) {
         return [[builder.createFn( t1.fn, t1.arg.and(t2.arg) )]];
     }),
+];
+
+sumRules = [
+    // a ⋁ a ⟶ a
+    rewriteSum( function (p1, p2) {
+        return productsEqual( p1, p2 );
+    }, function (p1, p2) {
+        return [p1];
+    })
 ];
 
 module.exports = normal;

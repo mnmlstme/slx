@@ -50,7 +50,7 @@ module.exports = {
     BOTTOM: BOTTOM,
     createLiteral: createLiteral,
     createFn: createFn,
-    isTerm,
-    isSum,
-    isProduct
+    isTerm: isTerm,
+    isSum: isSum,
+    isProduct: isProduct
 };
