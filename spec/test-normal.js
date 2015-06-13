@@ -11,9 +11,13 @@ describe("normalization", function () {
         expect(slx(".a:not(.a)").normal().toString())
             .toBe(":not(*)");
     });
-    it("returns .class selectors in sorted order", function () {
+    it("sorts .class selectors by name", function () {
         expect(slx(".b.a").normal().toString())
             .toBe(".a.b");
+    });
+    it("sorts :not(.class) selectors by name", function () {
+        expect(slx(".b:not(.a)").normal().toString())
+            .toBe(":not(.a).b");
     });
     it("puts ids before classes", function () {
         expect(slx(".a#b").normal().toString())
