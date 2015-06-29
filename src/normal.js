@@ -13,7 +13,7 @@ function normal () {
     var original = this;
 
     return original.normalized ? original :
-        new Slx( normalize( original.rep ), true );
+        new Slx( normalize( original.sop ), true );
 }
 
 function normalize ( originalSum ) {
@@ -288,9 +288,9 @@ var productRules = [
     // next(a ⋀ b) ⟶ next(a) ⋀ next(b)
     rewriteTerms( function (t) {
         return t.type === 'fn' && !t.negate && (t.fn === 'child' || t.fn === 'next') &&
-            t.arg.rep.length > 1;
+            t.arg.sop.length > 1;
     }, function (t) {
-        var sum = t.arg.rep.map( function (product) {
+        var sum = t.arg.sop.map( function (product) {
             return [builder.createFn(t.fn, new Slx([product]))];
         });
         return sum;
@@ -353,31 +353,37 @@ var productRules = [
 ];
 
 sumRules = [
+    // a ⋁ ⊤ ⟶ ⊤
+    // ⊤ ⋁ a ⟶ ⊤
+    rewriteSum( function (p1, p2) {
+        return productsEqual( p1, [builder.TOP] ) ||
+            productsEqual( p2, [builder.TOP] );
+    }, function () {
+        return [[builder.TOP]];
+    }),
+
+    // a ⋁ ⊥ ⟶ a
+    // ⊥ ⋁ a ⟶ a
+    rewriteSum( function (p1, p2) {
+        return productsEqual( p1, [builder.BOTTOM] ) ||
+            productsEqual( p2, [builder.BOTTOM] );
+    }, function () {
+        return productsEqual( p1, [builder.BOTTOM] ) ? [p2] : [p1];
+    }),
+
     // a ⋁ a ⟶ a
     rewriteSum( function (p1, p2) {
         return productsEqual( p1, p2 );
     }, function (p1, p2) {
         return [p1];
     }),
-/*
-// a ⋁ ¬a ⟶ ⊤
-    rewriteSum( function (p1, p2) {
-        // if two products are complements, they must have only one term each
-        var t1 = p1[0],
-            t2 = p2[0];
-        return p1.length === 1 && p2.length === 1 &&
-            t1 === builder.createLiteral( t2.type, t2, true );
-    }, function (p1, p2) {
-        return [[builder.TOP]];
-    }),
-*/
     // a ⋁ ¬a ⟶ ⊤
     // ab ⋁ ¬ab ⟶ b
     rewriteSum( function (p1, p2) {
         var terms = productsHaveOneMismatch( p1, p2 ),
             a1 = terms && terms[0],
             a2 = terms && terms[1];
-        return terms && a1 === builder.createLiteral( a2.type, a2, true ) && terms;
+        return terms && a1 === builder.invertTerm( a2 ) && terms;
     }, function (p1, p2, terms) {
         var b = p1.length === 1 ? [builder.TOP] :
                 _.reject( p1, function (t) {

@@ -19,7 +19,7 @@ var fnToCss = {
 };
 
 function toString () {
-    return this.rep.map( productToCss ).join(',');
+    return this.sop.map( productToCss ).join(',');
 }
 
 function productToCss ( product ) {
@@ -57,7 +57,7 @@ function productToCss ( product ) {
 
         arg = f.arg.toString();
 
-        if ( f.arg.rep.length > 1 ) {
+        if ( f.arg.sop.length > 1 ) {
             // TODO: this is not valid CSS: (.a, .b) > .c
             arg = '(' + arg + ')';
         }

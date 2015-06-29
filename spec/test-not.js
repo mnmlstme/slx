@@ -1,7 +1,5 @@
 var slx = require('../index');
 
-var DEFER = true;
-
 describe("complement of selector", function () {
     it("inverts * selector", function () {
         expect(slx("*").not().toString()).toBe(":not(*)");

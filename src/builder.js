@@ -33,6 +33,14 @@ function createFn (fn, arg, negate) {
     return {type: 'fn', fn: fn, arg: arg, negate: negate};
 }
 
+function invertTerm (term) {
+    var type = term.type;
+
+    return type === 'fn' ?
+        createFn( term.fn, term.arg, true ) :
+        createLiteral( type, term, true );
+}
+
 function isTerm ( sop ) {
     return sop.length === 1 && sop[0].length === 1;
 }
@@ -50,6 +58,7 @@ module.exports = {
     BOTTOM: BOTTOM,
     createLiteral: createLiteral,
     createFn: createFn,
+    invertTerm: invertTerm,
     isTerm: isTerm,
     isSum: isSum,
     isProduct: isProduct

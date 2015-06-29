@@ -1,7 +1,5 @@
 var slx = require('../index');
 
-var DEFER = true; // skip deferred tests
-
 describe("conjunction of selectors (logical AND, CSS juxtaposition)", function () {
     it("accepts .class selectors", function () {
         expect(slx(".a").and(slx(".b")).toString()).toBe(".a.b");

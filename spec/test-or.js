@@ -1,7 +1,5 @@
 var slx = require('../index');
 
-var DEFER = true; // skip deferred tests
-
 describe("disjunction of selectors (logical OR, CSS comma)", function () {
     it("accepts .class selectors", function () {
         expect(slx(".a").or(slx(".b")).toString()).toBe(".a,.b");
@@ -29,6 +27,5 @@ describe("disjunction of selectors (logical OR, CSS comma)", function () {
     it("combines products containing :not .class and .class", function () {
         expect(slx(":not(.a).b").or(slx(".a.b")).toString()).toBe(".b");
     });
-
 
 });

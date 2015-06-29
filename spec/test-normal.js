@@ -1,7 +1,5 @@
 var slx = require('../index');
 
-var DEFER = true; // skip deferred tests
-
 describe("normalization", function () {
     it("eliminates duplicate .class selectors", function () {
         expect(slx(".a.a").normal().toString())

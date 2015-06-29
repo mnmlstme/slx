@@ -3,7 +3,7 @@ var Slx = require('./constructor');
 var builder = require('./builder');
 
 function not() {
-    var sum = this.rep;
+    var sum = this.sop;
     // ¬(a ⋁ b) ⟶ ¬a ⋀ ¬b
     return _(sum).map( invertProduct )
         .reduce( function (a,b) {
@@ -20,12 +20,7 @@ function invertProduct (array) {
 }
 
 function invertTerm (term) {
-    var type = term.type,
-        literal = type === 'fn' ?
-            builder.createFn( term.fn, term.arg, true ) :
-            builder.createLiteral( type, term, true )
-
-    return (new Slx( [[literal]] )).normal();
+    return (new Slx( [[builder.invertTerm(term)]] )).normal();
 }
 
 module.exports = not;
