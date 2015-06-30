@@ -8,7 +8,7 @@ function not() {
     return _(sum).map( invertProduct )
         .reduce( function (a,b) {
             return a.and(b);
-        });
+        }).normal();
 }
 
 function invertProduct (array) {
@@ -20,7 +20,7 @@ function invertProduct (array) {
 }
 
 function invertTerm (term) {
-    return (new Slx( [[builder.invertTerm(term)]] )).normal();
+    return (new Slx( [[builder.invertTerm(term)]] ));
 }
 
 module.exports = not;

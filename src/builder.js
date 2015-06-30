@@ -30,6 +30,11 @@ function createLiteral (type, nameOrObject, invert) {
 }
 
 function createFn (fn, arg, negate) {
+    if ( negate && (fn === 'child' || fn === 'next') ) {
+        // invert argument instead
+        negate = false;
+        arg = arg.not();
+    }
     return {type: 'fn', fn: fn, arg: arg, negate: negate};
 }
 
@@ -37,7 +42,7 @@ function invertTerm (term) {
     var type = term.type;
 
     return type === 'fn' ?
-        createFn( term.fn, term.arg, true ) :
+        createFn( term.fn, term.arg, !term.negate ) :
         createLiteral( type, term, true );
 }
 

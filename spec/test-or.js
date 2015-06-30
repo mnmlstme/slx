@@ -5,7 +5,7 @@ describe("disjunction of selectors (logical OR, CSS comma)", function () {
         expect(slx(".a").or(slx(".b")).toString()).toBe(".a,.b");
     });
     it("accepts .class and #id selectors", function () {
-        expect(slx(".a").or(slx("#b")).toString()).toBe(".a,#b");
+        expect(slx(".a").or(slx("#b")).toString()).toBe("#b,.a");
     });
     it("accepts child and descendant selectors", function () {
         expect(slx("ul.a>li").or(slx("#b .b")).toString()).toBe("ul.a>li,#b .b");

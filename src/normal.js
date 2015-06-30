@@ -110,9 +110,7 @@ function applyAllSumRules ( originalSum ) {
         }
     } while ( sum !== priorSum );
 
-    // TODO: sort products in sum
-
-    return sum;
+    return _.sortBy(sum, productOrder);;
 }
 
 function applySumRule ( originalSum, rule ) {
@@ -147,6 +145,10 @@ var typeOrder = {
 
 function termOrder (t) {
     return typeOrder[t.type] + t.name + (t.negate ? '-' : '+');
+}
+
+function productOrder (p) {
+    return p.map( termOrder ).join('*');
 }
 
 function rewriteSum( matchFn, rewriteFn ) {
@@ -246,12 +248,21 @@ function findProductPair ( sum, matchFn ) {
     }
 }
 
+function sumsEqual ( a, b ) {
+    var mismatch = a.length !== b.length;
+
+    for ( var i = 0; !mismatch && i < a.length && i < b.length; i++ ) {
+        mismatch = !productsEqual(a[i], b[i]);
+    }
+
+    return !mismatch;
+}
+
 function productsEqual ( a, b ) {
     var mismatch = a.length !== b.length;
 
     for ( var i = 0; !mismatch && i < a.length && i < b.length; i++ ) {
-        // TODO: equality for functions
-        mismatch = a[i] !== b[i];
+        mismatch = !termsEqual(a[i], b[i]);
     }
 
     return !mismatch;
@@ -260,9 +271,12 @@ function productsEqual ( a, b ) {
 function productsHaveOneMismatch ( a, b ) {
     var mismatch = false;
 
+    if ( a.length !== b.length ) {
+        return false;
+    }
+
     for ( var i = 0; i < a.length && i < b.length; i++ ) {
-        // TODO: equality for functions
-        if ( a[i] !== b[i] ) {
+        if ( !termsEqual(a[i], b[i]) ) {
             if ( mismatch ) {
                 return false;
             }
@@ -273,6 +287,15 @@ function productsHaveOneMismatch ( a, b ) {
     return mismatch;
 }
 
+function termsEqual ( a, b ) {
+    return a === b ||
+        a.type === 'fn' && b.type === 'fn' && a.fn === b.fn &&
+        !!a.negate === !!b.negate && sumsEqual( a.arg.sop, b.arg.sop );
+}
+
+function productContainsTerm ( p, t ) {
+    return _.find(p, function (x) { return termsEqual( x, t ); });
+}
 
 var productRules = [
 
@@ -383,15 +406,34 @@ sumRules = [
         var terms = productsHaveOneMismatch( p1, p2 ),
             a1 = terms && terms[0],
             a2 = terms && terms[1];
-        return terms && a1 === builder.invertTerm( a2 ) && terms;
+        return terms && termsEqual(a2, builder.invertTerm(a1)) && terms;
     }, function (p1, p2, terms) {
         var b = p1.length === 1 ? [builder.TOP] :
                 _.reject( p1, function (t) {
                     return t === terms[0];
                 });
         return [b];
+    }),
+    // ab ⋁ ¬b ⟶ a ⋁ ¬b
+    // ¬a ⋁ ab ⟶ ¬a ⋁ b
+    rewriteSum( function (p1, p2) {
+        var t1, t2;
+        if ( p1.length > 1 && p2.length === 1 ) {
+            t2 = p2[0];
+            t1 = builder.invertTerm(t2);
+            return productContainsTerm( p1, t1 ) && [t1,null];
+        } else if ( p1.length === 1 && p2.length > 1 ) {
+            t1 = p1[0];
+            t2 = builder.invertTerm(t1);
+            return productContainsTerm( p2, t2 ) && [null,t2];
+        } else {
+            return false;
+        }
+    }, function (p1, p2, terms) {
+        debugger;
+        return [ _.reject( p1, function (t) { return t === terms[0]; } ),
+                _.reject( p2, function (t) { return t === terms[1]; } ) ];
     })
-
 ];
 
 module.exports = normal;
