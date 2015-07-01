@@ -37,18 +37,14 @@ function productToCss ( product ) {
         arg;
 
     if ( !functions.isEmpty() ) {
-        if ( functions.length > 1 ) {
+        if ( functions.size() > 1 ) {
             throw "CSS cannot express more than one function";
         }
-        switch ( f.fn ) {
-          case 'before':
-          case 'after':
+        if ( f.fn === 'before' || f.fn === 'after' ) {
             if ( string !== '*' ) {
-                throw "CSS cannot express predicates on ::" + f.fn;
+                throw "CSS cannot express predicates on " + fnToCss[ f.fn ];
             }
             string = '';
-            break;
-          default:
         }
 
         if ( !fnToCss[ f.fn ] ) {
@@ -58,13 +54,17 @@ function productToCss ( product ) {
         arg = f.arg.toString();
 
         if ( f.arg.sop.length > 1 ) {
-            // TODO: this is not valid CSS: (.a, .b) > .c
+            throw "CSS cannot express a sum as a function argument";
             arg = '(' + arg + ')';
         }
 
-        string = f.negate ?
-            (string === '*' ? '' : string ) + ':not(' + arg + fnToCss[ f.fn ] + '*)' :
-            arg + fnToCss[ f.fn ] + string;
+        if (f.negate) {
+            // CSS4
+            string = (string === '*' ? '' : string ) +
+                ':not(' + arg + fnToCss[ f.fn ] + '*)';
+        } else {
+            string = arg + fnToCss[ f.fn ] + string;
+        }
     }
 
     return string;

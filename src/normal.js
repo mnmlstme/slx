@@ -373,6 +373,20 @@ var productRules = [
     }, function (t1, t2) {
         return [[builder.createFn( t1.fn, t1.arg.and(t2.arg) )]];
     }),
+
+    // child(a) ⋀ desc(a) ⟶ child(a)
+    // next(a) ⋀ succ(a) ⟶ next(a)
+    rewriteTermPairs( function (t1,t2) {
+        return t1.type === 'fn' && t2.type === 'fn' &&
+            (t1.fn === 'child' && t2.fn === 'desc' ||
+             t1.fn === 'desc' && t2.fn === 'child' ||
+             t1.fn === 'next' && t2.fn === 'succ' ||
+             t1.fn === 'succ' && t2.fn === 'next' ) &&
+             sumsEqual(t2.arg.sop, t1.arg.sop);
+    }, function (t1, t2) {
+        return (t1.fn === 'child' || t1.fn === 'next') ? [[t1]] : [[t2]];
+    })
+
 ];
 
 sumRules = [
@@ -430,9 +444,23 @@ sumRules = [
             return false;
         }
     }, function (p1, p2, terms) {
-        debugger;
         return [ _.reject( p1, function (t) { return t === terms[0]; } ),
                 _.reject( p2, function (t) { return t === terms[1]; } ) ];
+    }),
+    // child(¬a) ⋁ desc(a) ⟶ ⊤
+    // next(¬a) ⋁ succ(a) ⟶ ⊤
+    rewriteSum( function (p1, p2) {
+        var t1 = p1[0],
+            t2 = p2[0];
+        return p1.length === 1 && p2.length === 1 &&
+            t1.type === 'fn' && t2.type === 'fn' &&
+            ( t1.fn === 'child' && t2.fn === 'desc' ||
+              t1.fn === 'desc' && t2.fn === 'child' ||
+              t1.fn === 'next' && t2.fn === 'succ' ||
+              t1.fn === 'succ' && t2.fn === 'next' ) &&
+            sumsEqual( t1.arg.sop, t2.arg.not().sop );
+    }, function (p1, p2) {
+        return [[builder.TOP]];
     })
 ];
 

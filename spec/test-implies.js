@@ -20,7 +20,7 @@ describe("logical implication", function () {
         expect(b.implies(aORb).always()).toBe(true);
     });
     it("proves ab -> ba", function () {
-        expect(ab.implies(slx('.b.a')).toString()).toBe('*');
+        expect(ab.implies(slx('.b.a')).always()).toBe(true);
     });
     it("proves a:hover -> a and a:hover -> :hover", function () {
         expect(slx('.a:hover').implies(slx('.a')).always()).toBe(true);
@@ -31,14 +31,17 @@ describe("logical implication", function () {
         expect(slx('.a>.b').implies(slx('.a>*')).always()).toBe(true);
         expect(slx('ul>li').implies(slx('li')).always()).toBe(true);
         expect(slx('ul>li').implies(slx('ul>*')).always()).toBe(true);
-        expect(slx('ul.a>li.b').implies(slx('.a>.b')).toString()).toBe('*');
+        expect(slx('ul.a>li.b').implies(slx('.a>.b')).always()).toBe(true);
     });
     it("proves a b -> b and a b -> a *", function () {
         expect(slx('.a .b').implies(slx('.b')).always()).toBe(true);
         expect(slx('.a .b').implies(slx('.a *')).always()).toBe(true);
     });
-    DEFER || it("proves a>b -> a b", function () {
-        expect(slx('.a>.b').implies(slx('.a .b')).toString()).toBe('*');
+    it("proves a>b -> a b", function () {
+        expect(slx('.a>.b').implies(slx('.a .b')).always()).toBe(true);
+    });
+    it("proves a+b -> a~b", function () {
+        expect(slx('.a+.b').implies(slx('.a~.b')).always()).toBe(true);
     });
 
 
