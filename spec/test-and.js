@@ -60,24 +60,39 @@ describe("conjunction of selectors (logical AND, CSS juxtaposition)", function (
     });
 
     it("cancels :not .class and .class selectors", function () {
-        expect(slx(":not(.a)").and(slx(".a")).toString()).toBe(":not(*)");
+        expect(slx(":not(.a)").and(slx(".a")).toString())
+            .toBe(":not(*)");
     });
     it("cancels multiple tag selectors", function () {
-        expect(slx("a.b").and(slx("span")).toString()).toBe(":not(*)");
+        expect(slx("a.b").and(slx("span")).toString())
+            .toBe(":not(*)");
     });
     it("cancels multiple #id selectors", function () {
-        expect(slx("#a").and(slx("#b")).toString()).toBe(":not(*)");
+        expect(slx("#a").and(slx("#b")).toString())
+            .toBe(":not(*)");
     });
 
     it("combines two child selectors", function () {
-        expect(slx(".a>*").and(slx(".b>*")).toString()).toBe(".a.b>*");
+        expect(slx(".a>*").and(slx(".b>*")).toString())
+            .toBe(".a.b>*");
     });
     it("combines two next selectors", function () {
-        expect(slx(".a+*").and(slx(".b+*")).toString()).toBe(".a.b+*");
+        expect(slx(".a+*").and(slx(".b+*")).toString())
+            .toBe(".a.b+*");
     });
 
     it("combines child and descendent selectors", function () {
-        expect(slx(".a>*").and(slx(".a *")).toString()).toBe(".a>*");
+        expect(slx(".a>*").and(slx(".a *")).toString())
+            .toBe(".a>*");
+        expect(slx(".a>.b").and(slx(".a .b")).toString())
+            .toBe(".a>.b");
+    });
+
+    it("combines next and successor selectors", function () {
+        expect(slx(".a+*").and(slx(".a~*")).toString())
+            .toBe(".a+*");
+        expect(slx(".a+.b").and(slx(".a~.b")).toString())
+            .toBe(".a+.b");
     });
 
 });

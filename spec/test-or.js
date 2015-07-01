@@ -28,4 +28,17 @@ describe("disjunction of selectors (logical OR, CSS comma)", function () {
         expect(slx(":not(.a).b").or(slx(".a.b")).toString()).toBe(".b");
     });
 
+    it("combines child and descendant selectors", function () {
+        expect(slx(".a>*").or(slx(".a *")).toString())
+            .toBe(".a *");
+        expect(slx(".a>.b").or(slx(".a .b")).toString())
+            .toBe(".a .b");
+    });
+    it("combines next and successor selectors", function () {
+        expect(slx(".a+*").or(slx(".a~*")).toString())
+            .toBe(".a~*");
+        expect(slx(".a+.b").or(slx(".a~.b")).toString())
+            .toBe(".a~.b");
+    });
+
 });

@@ -293,6 +293,10 @@ function termsEqual ( a, b ) {
         !!a.negate === !!b.negate && sumsEqual( a.arg.sop, b.arg.sop );
 }
 
+function rejectTerm ( p, t ) {
+    return _.reject( p, function (x) { return termsEqual( x, t ); } );
+}
+
 function productContainsTerm ( p, t ) {
     return _.find(p, function (x) { return termsEqual( x, t ); });
 }
@@ -321,15 +325,14 @@ var productRules = [
 
     // a ⋀ a ⟶ a
     rewriteTermPairs( function (t1,t2) {
-        return t2 === t1;
+        return termsEqual(t1, t2);
     }, function (t1) {
         return [[t1]];
     }),
 
     // a ⋀ ¬a ⟶ ⊥
     rewriteTermPairs( function (t1, t2) {
-        return t1.type !== 'fn' &&
-            t2 === builder.createLiteral( t1.type, t1, true );
+        return t1.type !== 'fn' && termsEqual( builder.invertTerm(t2), t1 );
     }, function () {
         return [[builder.BOTTOM]];
     }),
@@ -414,6 +417,7 @@ sumRules = [
     }, function (p1, p2) {
         return [p1];
     }),
+
     // a ⋁ ¬a ⟶ ⊤
     // ab ⋁ ¬ab ⟶ b
     rewriteSum( function (p1, p2) {
@@ -422,12 +426,9 @@ sumRules = [
             a2 = terms && terms[1];
         return terms && termsEqual(a2, builder.invertTerm(a1)) && terms;
     }, function (p1, p2, terms) {
-        var b = p1.length === 1 ? [builder.TOP] :
-                _.reject( p1, function (t) {
-                    return t === terms[0];
-                });
-        return [b];
+        return [ p1.length > 1 ? rejectTerm( p1, terms[0] ) : [builder.TOP] ];
     }),
+
     // ab ⋁ ¬b ⟶ a ⋁ ¬b
     // ¬a ⋁ ab ⟶ ¬a ⋁ b
     rewriteSum( function (p1, p2) {
@@ -444,23 +445,39 @@ sumRules = [
             return false;
         }
     }, function (p1, p2, terms) {
-        return [ _.reject( p1, function (t) { return t === terms[0]; } ),
-                _.reject( p2, function (t) { return t === terms[1]; } ) ];
+        return [ rejectTerm( p1, terms[0] ), rejectTerm( p2, terms[1] ) ];
     }),
-    // child(¬a) ⋁ desc(a) ⟶ ⊤
-    // next(¬a) ⋁ succ(a) ⟶ ⊤
+
+    // b·child(a) ⋁ b·desc(a) ⟶ b·desc(a)
+    // b·next(a) ⋁ b·succ(a) ⟶ b·succ(a)
     rewriteSum( function (p1, p2) {
-        var t1 = p1[0],
-            t2 = p2[0];
-        return p1.length === 1 && p2.length === 1 &&
-            t1.type === 'fn' && t2.type === 'fn' &&
+        var terms = productsHaveOneMismatch( p1, p2 ),
+            t1 = terms && terms[0],
+            t2 = terms && terms[1];
+        return terms && t1.type === 'fn' && t2.type === 'fn' &&
             ( t1.fn === 'child' && t2.fn === 'desc' ||
               t1.fn === 'desc' && t2.fn === 'child' ||
               t1.fn === 'next' && t2.fn === 'succ' ||
               t1.fn === 'succ' && t2.fn === 'next' ) &&
-            sumsEqual( t1.arg.sop, t2.arg.not().sop );
-    }, function (p1, p2) {
-        return [[builder.TOP]];
+            sumsEqual( t1.arg.sop, t2.arg.sop ) && terms;
+    }, function (p1, p2, terms) {
+        return [(terms[0].fn === 'desc' || terms[0].fn === 'succ') ? p1 : p2];
+    }),
+
+    // b·child(¬a) ⋁ b·desc(a) ⟶ b
+    // b·next(¬a) ⋁ b·succ(a) ⟶ b
+    rewriteSum( function (p1, p2) {
+        var terms = productsHaveOneMismatch( p1, p2 ),
+            t1 = terms && terms[0],
+            t2 = terms && terms[1];
+        return terms && t1.type === 'fn' && t2.type === 'fn' &&
+            ( t1.fn === 'child' && t2.fn === 'desc' ||
+              t1.fn === 'desc' && t2.fn === 'child' ||
+              t1.fn === 'next' && t2.fn === 'succ' ||
+              t1.fn === 'succ' && t2.fn === 'next' ) &&
+            sumsEqual( t1.arg.sop, t2.arg.not().sop ) && terms;
+    }, function (p1, p2, terms) {
+        return [ p1.length > 1 ? rejectTerm( p1, terms[0] ) : [builder.TOP] ];
     })
 ];
 
