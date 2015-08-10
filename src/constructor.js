@@ -1,9 +1,11 @@
 var _ = require('lodash');
 var builder = require('./builder');
 
-function Slx ( sumOfProducts, normalized ) {
+function Slx ( sumOfProducts ) {
     this.sop = sumOfProducts || [[]];
-    this.normalized = normalized;
 };
+
+Slx.TOP = new Slx( [[builder.TOP]] );
+Slx.BOTTOM = new Slx( [[builder.BOTTOM]] );
 
 module.exports = Slx;

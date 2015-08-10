@@ -12,8 +12,7 @@ var MAX_PRODUCT_RULE_ITERATIONS = 10;
 function normal () {
     var original = this;
 
-    return original.normalized ? original :
-        new Slx( normalize( original.sop ), true );
+    return original.normalized ? original : normalize( original );
 }
 
 function normalize ( originalSum ) {
@@ -23,11 +22,11 @@ function normalize ( originalSum ) {
 
     do {
         priorSum = sum;
-        for ( var i = 0; i < sum.length; i++ ) {
-            sum = applyAllProductRules(sum, i);
+        for ( var i = 0; i < sum.sop.length; i++ ) {
+            sum = applyAllProductRules( sum );
         }
 
-        if ( sum.length > 1 && (iteration === 0 || sum !== priorSum) ) {
+        if ( sum.sop.length > 1 && (iteration === 0 || sum !== priorSum) ) {
             sum = applyAllSumRules( sum );
         }
 
@@ -36,43 +35,34 @@ function normalize ( originalSum ) {
         }
     } while( sum !== priorSum );
 
+    sum.normalized = true;
     return sum;
 }
 
-function applyAllProductRules ( originalSum, i ) {
+function applyAllProductRules ( originalSum ) {
     var sum = originalSum,
-        iteration = 0,
-        priorSum,
-        sorted;
+        iteration = 0;
 
-    do {
-        sorted = _.sortBy( sum[i], termOrder );
-        if ( !productsEqual( sorted, sum[i] ) ) {
-            sum = sum.slice();
-            sum[i] = sorted;
-        }
-
-        priorSum = sum;
-
-        productRules.forEach( function (rule) {
-            sum = applyProductRule( sum, i, rule );
+    productRules.forEach( function (rule) {
+        sum = _(sum.sop).map( function ( productArray ) {
+            return applyProductRule( new Slx([productArray]), rule );
+        }).reduce( function (a, b) {
+            return new Slx( _.union(a.sop, b.sop) );
         });
+    });
 
-        if ( sum !== priorSum && iteration++ > MAX_PRODUCT_ITERATIONS ) {
-            throw "product rewrite loop exceeded max iterations";
-        }
+    sum = new Slx( sum.sop.map( function (productArray) {
+        return _.sortBy( productArray, termOrder );
+    }));
 
-    } while ( sum !== priorSum );
-
-    return sum;
+    return sumsEqual( sum.sop, originalSum.sop ) ? originalSum : sum;
 }
 
-function applyProductRule ( originalSum, i, rule ) {
-    var sum = originalSum,
-        product = sum[i],
-        iteration = 0,
+function applyProductRule ( product, rule ) {
+    var iteration = 0,
         rewrite,
-        rewritten;
+        rewritten,
+        newProducts = [];
 
     do {
         rewrite = rule(product);
@@ -82,55 +72,35 @@ function applyProductRule ( originalSum, i, rule ) {
                 throw "product rule loop exceeded max iterations";
             }
             rewritten = rewrite(product);
-            product = rewritten.shift();
-            sum = sum.slice();
-            sum.splice(i, 1, product);
-            while ( rewritten.length ) {
-                sum.push( rewritten.shift() );
-            }
+            product = new Slx( [rewritten.sop.shift()] );
+            newProducts = _.union(newProducts, rewritten.sop);
         }
     } while( rewrite );
 
-    return sum;
+    return newProducts.length ? new Slx(_.union(product.sop, newProducts)) : product;
 }
 
 function applyAllSumRules ( originalSum ) {
     var sum = originalSum,
-        iteration = 0,
-        priorSum;
+        iteration = 0;
 
-    do {
-        priorSum = sum;
-        sumRules.forEach( function (rule) {
-            sum = applySumRule( sum, rule );
-        });
+    sumRules.forEach( function (rule) {
+        var rewrite = rule(sum);
+        do {
+            rewrite = rule(sum);
 
-        if ( priorSum !== sum && iteration++ > MAX_SUM_ITERATIONS ) {
-            throw "sum rewrite loop exceeded max iterations";
-        }
-    } while ( sum !== priorSum );
-
-    return _.sortBy(sum, productOrder);;
-}
-
-function applySumRule ( originalSum, rule ) {
-    var sum = originalSum,
-        iteration = 0,
-        rewrite;
-
-    do {
-        rewrite = rule(sum);
-
-        if( rewrite ) {
-            if ( iteration++ > MAX_SUM_RULE_ITERATIONS )  {
-                throw "sum rule loop exceeded max iterations";
+            if( rewrite ) {
+                if ( iteration++ > MAX_SUM_RULE_ITERATIONS )  {
+                    throw "sum rule loop exceeded max iterations";
+                }
+                sum = rewrite(sum);
             }
+        } while( rewrite );
+    });
 
-            sum = rewrite(sum);
-        }
-    } while( rewrite );
+    sum = new Slx(_.sortBy(sum.sop, productOrder));
 
-    return sum;
+    return sumsEqual( sum.sop, originalSum.sop ) ? originalSum : sum;
 }
 
 var typeOrder = {
@@ -156,12 +126,12 @@ function rewriteSum( matchFn, rewriteFn ) {
         var m = findProductPair( sum, matchFn );
         if ( m ) {
             return function (sum) {
-                var others = _.reject( sum, function (p, i) {
+                var others = new Slx(_.reject( sum.sop, function (p, i) {
                     return i === m.i1 || i === m.i2;
-                }),
+                })),
                 rewritten = rewriteFn(m.p1, m.p2, m.bound);
 
-                return _.union( others, rewritten );
+                return rewritten.or(others);
             }
         }
     }
@@ -172,14 +142,12 @@ function rewriteTerms( matchFn, rewriteFn ) {
         var m = findTerm( product, matchFn );
         if ( m ) {
             return function (product) {
-                var others = _.reject( product, function (t, i) {
+                var others = new Slx([_.reject( product.sop[0], function (t, i) {
                         return i === m.i;
-                    }),
+                    })]),
                     rewritten = rewriteFn(m.t, m.bound);
 
-                return rewritten.map( function (product) {
-                    return _.union( others, product );
-                });
+                return rewritten.and(others);
             };
         }
     }
@@ -190,26 +158,25 @@ function rewriteTermPairs( matchFn, rewriteFn ) {
         var m = findPair( product, matchFn );
         if ( m ) {
             return function (product) {
-                var others = _.reject( product, function (t, i) {
+                var others = new Slx([_.reject( product.sop[0], function (t, i) {
                         return i === m.i1 || i === m.i2;
-                    }),
+                    })]),
                     rewritten = rewriteFn(m.t1, m.t2, m.bound);
 
-                return rewritten.map( function (product) {
-                    return _.union( others, product );
-                });
+                return rewritten.and(others);
             };
         }
     }
 }
 
 function findTerm ( product, matchFn ) {
-    var i, bound;
-    for ( i = 0; i < product.length; i++ ) {
-        bound = matchFn( product[i] );
+    var productArray = product.sop[0],
+        i, bound;
+    for ( i = 0; i < productArray.length; i++ ) {
+        bound = matchFn( productArray[i] );
         if ( bound ) {
             return {
-                t: product[i], i: i,
+                t: productArray[i], i: i,
                 bound: bound
             };
         }
@@ -217,14 +184,15 @@ function findTerm ( product, matchFn ) {
 }
 
 function findPair ( product, matchFn ) {
-    var i, j, bound;
-    for ( i = 0; i < product.length; i++ ) {
-        for ( j = i+1; j < product.length; j++ ) {
-            bound = matchFn( product[i], product[j] );
+    var productArray = product.sop[0],
+        i, j, bound;
+    for ( i = 0; i < productArray.length; i++ ) {
+        for ( j = i+1; j < productArray.length; j++ ) {
+            bound = matchFn( productArray[i], productArray[j] );
             if ( bound ) {
                 return {
-                    t1: product[i], i1: i,
-                    t2: product[j], i2: j,
+                    t1: productArray[i], i1: i,
+                    t2: productArray[j], i2: j,
                     bound: bound
                 };
             }
@@ -233,14 +201,15 @@ function findPair ( product, matchFn ) {
 }
 
 function findProductPair ( sum, matchFn ) {
-    var i, j, bound;
-    for ( i = 0; i < sum.length; i++ ) {
-        for ( j = i+1; j < sum.length; j++ ) {
-            bound = matchFn( sum[i], sum[j] );
+    var sumArray = sum.sop,
+        i, j, bound;
+    for ( i = 0; i < sumArray.length; i++ ) {
+        for ( j = i+1; j < sumArray.length; j++ ) {
+            bound = matchFn( sumArray[i], sumArray[j] );
             if ( bound ) {
                 return {
-                    p1: sum[i], i1: i,
-                    p2: sum[j], i2: j,
+                    p1: sumArray[i], i1: i,
+                    p2: sumArray[j], i2: j,
                     bound: bound
                 }
             }
@@ -301,6 +270,35 @@ function productContainsTerm ( p, t ) {
     return _.find(p, function (x) { return termsEqual( x, t ); });
 }
 
+var rules = [
+    {
+        // ¬child(a) ⟶ child(¬a)
+        name: 'negated child function',
+        template: [[ { type: 'fn', fn: 'child', negate: true, assignArg: 'a' } ]],
+        rewrite: function (match) {
+            var a = match.a;
+            return new Slx([[builder.createFn('child', a.not())]]);
+        }
+    },
+    {
+        // ¬next(a) ⟶ next(¬a)
+        name: 'negated next function',
+        template: [[ { type: 'fn', fn: 'next', negate: true, assignArg: 'arg' } ]],
+        rewrite: function (match) {
+            var arg = match.arg;
+            return new Slx([[builder.createFn('next', a.not())]]);
+        }
+    },
+    {
+        // child(a ⋀ b) ⟶ child(a) ⋀ child(b)
+        name: 'conjunction in child function',
+        template: [[ { type: 'fn', fn: 'next', negate: false, assignArg: 'arg' } ]],
+        condition: function (match) {
+            var arg = match.arg;
+        }
+    }
+];
+
 var productRules = [
 
     // ¬child(a) ⟶ child(¬a)
@@ -308,11 +306,11 @@ var productRules = [
     rewriteTerms( function (t) {
         return t.type === 'fn' && t.negate && (t.fn === 'child' || t.fn === 'next');
     }, function (t) {
-        return [[builder.createFn(t.fn, t.arg.not())]];
+        return new Slx([[builder.createFn(t.fn, t.arg.not())]]);
     }),
 
-    // child(a ⋀ b) ⟶ child(a) ⋀ child(b)
-    // next(a ⋀ b) ⟶ next(a) ⋀ next(b)
+    // child(a ⋁ b) ⟶ child(a) ⋁ child(b)
+    // next(a ⋁ b) ⟶ next(a) ⋁ next(b)
     rewriteTerms( function (t) {
         return t.type === 'fn' && !t.negate && (t.fn === 'child' || t.fn === 'next') &&
             t.arg.sop.length > 1;
@@ -320,21 +318,21 @@ var productRules = [
         var sum = t.arg.sop.map( function (product) {
             return [builder.createFn(t.fn, new Slx([product]))];
         });
-        return sum;
+        return new Slx(sum);
     }),
 
     // a ⋀ a ⟶ a
     rewriteTermPairs( function (t1,t2) {
         return termsEqual(t1, t2);
     }, function (t1) {
-        return [[t1]];
+        return new Slx([[t1]]);
     }),
 
     // a ⋀ ¬a ⟶ ⊥
     rewriteTermPairs( function (t1, t2) {
         return t1.type !== 'fn' && termsEqual( builder.invertTerm(t2), t1 );
     }, function () {
-        return [[builder.BOTTOM]];
+        return new Slx([[builder.BOTTOM]]);
     }),
 
     // tag:a ⋀ tag:b ⟶ ⊥
@@ -342,7 +340,7 @@ var productRules = [
         return t1.type === 'tag' && t2.type === 'tag' &&
             !t1.negate && !t2.negate && t1.name !== t2.name;
     }, function () {
-        return [[builder.BOTTOM]];
+        return new Slx([[builder.BOTTOM]]);
     }),
 
     // id:a ⋀ id:b ⟶ ⊥
@@ -350,14 +348,14 @@ var productRules = [
         return t1.type === 'id' && t2.type === 'id' &&
             !t1.negate && !t2.negate && t1.name !== t2.name;
     }, function () {
-        return [[builder.BOTTOM]];
+        return new Slx([[builder.BOTTOM]]);
     }),
     // a ⋀ ⊥ ⟶ ⊥
     // ⊥ ⋀ a ⟶ ⊥
     rewriteTermPairs( function (t1, t2) {
         return t1 === builder.BOTTOM || t2 === builder.BOTTOM;
     }, function () {
-        return [[builder.BOTTOM]];
+        return new Slx([[builder.BOTTOM]]);
     }),
 
     // a ⋀ ⊤ ⟶ a
@@ -365,7 +363,7 @@ var productRules = [
     rewriteTermPairs( function (t1, t2) {
         return t1 === builder.TOP || t2 === builder.TOP;
     }, function (t1, t2) {
-        return t1 === builder.TOP ? [[t2]] : [[t1]];
+        return new Slx(t1 === builder.TOP ? [[t2]] : [[t1]]);
     }),
 
     // child(a) ⋀ child(b) ⟶ child(a ⋀ b)
@@ -374,7 +372,7 @@ var productRules = [
         return t1.type === 'fn' && t2.type === 'fn' &&
             (t1.fn === 'child' || t1.fn === 'next') && t2.fn === t1.fn;
     }, function (t1, t2) {
-        return [[builder.createFn( t1.fn, t1.arg.and(t2.arg) )]];
+        return new Slx([[builder.createFn( t1.fn, t1.arg.and(t2.arg) )]]);
     }),
 
     // child(a) ⋀ desc(a) ⟶ child(a)
@@ -387,7 +385,7 @@ var productRules = [
              t1.fn === 'succ' && t2.fn === 'next' ) &&
              sumsEqual(t2.arg.sop, t1.arg.sop);
     }, function (t1, t2) {
-        return (t1.fn === 'child' || t1.fn === 'next') ? [[t1]] : [[t2]];
+        return new Slx((t1.fn === 'child' || t1.fn === 'next') ? [[t1]] : [[t2]]);
     })
 
 ];
@@ -399,7 +397,7 @@ sumRules = [
         return productsEqual( p1, [builder.TOP] ) ||
             productsEqual( p2, [builder.TOP] );
     }, function () {
-        return [[builder.TOP]];
+        return new Slx([[builder.TOP]]);
     }),
 
     // a ⋁ ⊥ ⟶ a
@@ -408,14 +406,14 @@ sumRules = [
         return productsEqual( p1, [builder.BOTTOM] ) ||
             productsEqual( p2, [builder.BOTTOM] );
     }, function () {
-        return productsEqual( p1, [builder.BOTTOM] ) ? [p2] : [p1];
+        return new Slx(productsEqual( p1, [builder.BOTTOM] ) ? [p2] : [p1]);
     }),
 
     // a ⋁ a ⟶ a
     rewriteSum( function (p1, p2) {
         return productsEqual( p1, p2 );
     }, function (p1, p2) {
-        return [p1];
+        return new Slx([p1]);
     }),
 
     // a ⋁ ¬a ⟶ ⊤
@@ -426,7 +424,7 @@ sumRules = [
             a2 = terms && terms[1];
         return terms && termsEqual(a2, builder.invertTerm(a1)) && terms;
     }, function (p1, p2, terms) {
-        return [ p1.length > 1 ? rejectTerm( p1, terms[0] ) : [builder.TOP] ];
+        return new Slx([ p1.length > 1 ? rejectTerm( p1, terms[0] ) : [builder.TOP] ]);
     }),
 
     // ab ⋁ ¬b ⟶ a ⋁ ¬b
@@ -445,7 +443,7 @@ sumRules = [
             return false;
         }
     }, function (p1, p2, terms) {
-        return [ rejectTerm( p1, terms[0] ), rejectTerm( p2, terms[1] ) ];
+        return new Slx([ rejectTerm( p1, terms[0] ), rejectTerm( p2, terms[1] ) ]);
     }),
 
     // b·child(a) ⋁ b·desc(a) ⟶ b·desc(a)
@@ -461,7 +459,7 @@ sumRules = [
               t1.fn === 'succ' && t2.fn === 'next' ) &&
             sumsEqual( t1.arg.sop, t2.arg.sop ) && terms;
     }, function (p1, p2, terms) {
-        return [(terms[0].fn === 'desc' || terms[0].fn === 'succ') ? p1 : p2];
+        return new Slx([(terms[0].fn === 'desc' || terms[0].fn === 'succ') ? p1 : p2]);
     }),
 
     // b·child(¬a) ⋁ b·desc(a) ⟶ b
@@ -477,7 +475,7 @@ sumRules = [
               t1.fn === 'succ' && t2.fn === 'next' ) &&
             sumsEqual( t1.arg.sop, t2.arg.not().sop ) && terms;
     }, function (p1, p2, terms) {
-        return [ p1.length > 1 ? rejectTerm( p1, terms[0] ) : [builder.TOP] ];
+        return new Slx([ p1.length > 1 ? rejectTerm( p1, terms[0] ) : [builder.TOP] ]);
     })
 ];
 
